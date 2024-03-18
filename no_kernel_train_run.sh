@@ -1,0 +1,15 @@
+python run.py \
+--problem tsp \
+--graph_size 50 \
+--step_method 2_opt \
+--n_step 4 \
+--T_train 200 \
+--Xi_CL 2 \
+--best_cl \
+--max_grad_norm 0.2 \
+--val_m 1 \
+--val_dataset  './datasets/tsp_50_10000.pkl' \
+--run_name 'TSP50_no_kernel' \
+--kernel no_kernel \
+--embedding_dim 64 \
+--hidden_dim 64
