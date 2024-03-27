@@ -1,6 +1,6 @@
 python run.py \
 --problem tsp \
---graph_size 50 \
+--graph_size 100 \
 --step_method 2_opt \
 --n_step 4 \
 --T_train 200 \
@@ -12,4 +12,5 @@ python run.py \
 --run_name 'TSP50_no_kernel' \
 --kernel no_kernel \
 --embedding_dim 64 \
---hidden_dim 64
+--hidden_dim 64 \
+--batch_size 450
