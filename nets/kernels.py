@@ -12,35 +12,35 @@ def euclidean_matrix(Q, K):
     -2*torch.matmul(Q, K.transpose(-2, -1))
     )
 
-def normalize(G, a=-9, b=9):
+def normalize(G, a=1):
     max_vals = torch.max(torch.max(G, dim=-1)[0], dim=-1)[0]
     min_vals = torch.min(torch.min(G, dim=-1)[0], dim=-1)[0]
-    return a + ((G - min_vals[..., None, None]) * (b - a) / (max_vals - min_vals)[..., None, None])
+    return -a + ((G - min_vals[..., None, None]) * 2 * a  / (max_vals - min_vals)[..., None, None])
 
-def vanilla_attention(Q, K, a=9):
+def vanilla_attention(Q, K, a=1):
     return torch.matmul(Q, K.transpose(-2, -1))
 
-def cauchy(Q, K, a=9):
+def cauchy(Q, K, a=1):
     dist = euclidean_matrix(Q,K)
     compatibility = 1 / (1 + dist)
     return compatibility
 
-def normalized_cauchy(Q, K, a=9):
+def normalized_cauchy(Q, K, a=1):
     dist = euclidean_matrix(Q,K)
     compatibility = 1 / (1 + dist)
     return normalize(compatibility, -a, a)
 
-def clipped_cauchy(Q, K, a=9):
+def clipped_cauchy(Q, K, a=1):
     dist = euclidean_matrix(Q,K)
     compatibility = 1 / (1 + dist)
     return torch.clamp(compatibility,-a,a)
 
-def exponential(Q, K, a=9):
+def exponential(Q, K, a=1):
     dist = euclidean_matrix(Q,K)
     compatibility = torch.exp(-torch.sqrt(torch.abs(dist)))
     return compatibility
 
-def gaussian(Q, K, a=9):
+def gaussian(Q, K, a=1):
     dist = euclidean_matrix(Q,K)
     compatibility = torch.exp(-dist)
     return compatibility
