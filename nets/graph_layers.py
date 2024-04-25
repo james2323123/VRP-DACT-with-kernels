@@ -294,7 +294,7 @@ class MultiHeadAttention(nn.Module):
 
         # Get attention correlations and norm by softmax
         node_correlations = self.norm_factor * self.kernel_func(Q_node, K_node)
-        pos_correlations =  self.norm_factor * self.kernel_func(Q_pos, K_pos)
+        pos_correlations =  self.norm_factor * torch.matmul(Q_pos, K_pos.transpose(-2, -1))
         attn1 = F.softmax(node_correlations, dim=-1) # head, bs, n, n
         attn2 = F.softmax(pos_correlations, dim=-1) # head, bs, n, n
         
