@@ -1,0 +1,16 @@
+python run.py \
+--eval_only \
+--problem tsp \
+--graph_size 100 \
+--step_method 2_opt \
+--n_step 4 \
+--T_max 5000 \
+--val_m 1 \
+--load_path './outputs/tsp_100/TSP100_cauchy_48by2_new_20240425T120714/epoch-199.pt' \
+--init_val_met greedy \
+--val_dataset  './datasets/tsp_100_10000.pkl' \
+--kernel cauchy \
+--hidden_dim 48 \
+--embedding_dim 48 \
+--no_tb \
+--no_saving \
