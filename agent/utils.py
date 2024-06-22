@@ -56,11 +56,11 @@ def validate(rank, problem, agent, val_dataset, tb_logger, distributed = False, 
     
     s_time = time.time()
 
-    bv = torch.tensor([])
-    cost_hist = torch.tensor([])
-    best_hist = torch.tensor([])
-    r = torch.tensor([])
-    rec_history = torch.tensor([])
+    bv = torch.tensor([], device=opts.device)
+    cost_hist = torch.tensor([], device=opts.device)
+    best_hist = torch.tensor([], device=opts.device)
+    r = torch.tensor([], device=opts.device)
+    rec_history = torch.tensor([], device=opts.device)
     
     for batch_id, batch in enumerate(val_dataloader):
         bv_i, cost_hist_i, best_hist_i, r_i, rec_history_i = agent.rollout(problem,
