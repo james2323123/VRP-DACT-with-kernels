@@ -50,14 +50,13 @@ def validate(rank, problem, agent, val_dataset, tb_logger, distributed = False, 
                                     pin_memory=True,
                                     sampler=train_sampler)
     else:
-        val_dataloader = DataLoader(val_dataset, batch_size=opts.val_size, shuffle=False,
+        val_dataloader = DataLoader(val_dataset, batch_size=opts.val_batch_size, shuffle=False,
                                    num_workers=0,
                                    pin_memory=True)
     
     s_time = time.time()
     
     for batch_id, batch in enumerate(val_dataloader):
-        assert batch_id < 1
         bv, cost_hist, best_hist, r, rec_history = agent.rollout(problem,
                                                                  opts.val_m,
                                                                  batch,
