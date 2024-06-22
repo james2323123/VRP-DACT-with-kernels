@@ -55,14 +55,26 @@ def validate(rank, problem, agent, val_dataset, tb_logger, distributed = False, 
                                    pin_memory=True)
     
     s_time = time.time()
+
+    bv = torch.tensor([])
+    cost_hist = torch.tensor([])
+    best_hist = torch.tensor([])
+    r = torch.tensor([])
+    rec_history = torch.tensor([])
     
     for batch_id, batch in enumerate(val_dataloader):
-        bv, cost_hist, best_hist, r, rec_history = agent.rollout(problem,
+        bv_i, cost_hist_i, best_hist_i, r_i, rec_history_i = agent.rollout(problem,
                                                                  opts.val_m,
                                                                  batch,
                                                                  do_sample = True,
                                                                  record = False,
                                                                  show_bar = rank==0)
+
+        bv = torch.cat([bv, bv_i], 0)
+        cost_hist = torch.cat([cost_hist, cost_hist_i], 0)
+        best_hist = torch.cat([best_hist, best_hist_i], 0)
+        r = torch.cat([r, r_i], 0)
+        rec_history = torch.cat([rec_history, rec_history_i], 0)
     
     if distributed and opts.distributed:
         dist.barrier()
