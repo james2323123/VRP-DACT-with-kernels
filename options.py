@@ -56,7 +56,7 @@ def get_options(args=None):
     parser.add_argument('--val_size', type=int, default=1000, help='number of instances for validation/inference')
     parser.add_argument('--val_dataset', type=str, default = './datasets/tsp_20_10000.pkl', help='dataset file path')
     parser.add_argument('--val_m', type=int, default=1, help='number of data augments (<=8)')
-
+    parser.add_argument('--val_batch_size', type=int, default=1000, help='batch size for validation')
     # resume and load models
     parser.add_argument('--load_path', default = None, help='path to load model parameters and optimizer state from')
     parser.add_argument('--resume', default = None, help='resume from previous checkpoint file')
