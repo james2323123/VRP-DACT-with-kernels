@@ -1,6 +1,6 @@
 from torch import nn
 import torch
-from nets.graph_layers import MultiHeadEncoder, MultiHeadDecoder, EmbeddingNet
+from nets.graph_layers import MultiHeadEncoder, MultiHeadDecoder, MultiHeadDecoderPDTSP, EmbeddingNet
 from torch.distributions import Categorical
 import torch.nn.functional as F
 
@@ -25,7 +25,8 @@ class Actor(nn.Module):
                  normalization,
                  v_range,
                  seq_length,
-                 kernel = 'no_kernel'
+                 kernel = 'no_kernel',
+                 kernel_enabled = [True, False]
                  ):
         super(Actor, self).__init__()
         
@@ -39,7 +40,7 @@ class Actor(nn.Module):
         self.seq_length = seq_length
         
         # see Appendix D
-        if problem_name == 'tsp':
+        if problem_name == 'tsp' or problem_name == 'pdtsp' or problem_name == 'pdtspl':
             self.node_dim = 2
         elif problem_name == 'cvrp':
             self.node_dim = 7
@@ -57,13 +58,21 @@ class Actor(nn.Module):
                                 self.embedding_dim, 
                                 self.hidden_dim, 
                                 self.normalization,
-                                kernel = kernel)
+                                kernel = kernel,
+                                kernel_enabled = kernel_enabled
+                                )
             for _ in range(self.n_layers))) # stack L layers
-            
-        self.decoder = MultiHeadDecoder(n_heads = self.n_heads_decoder,
-                                        input_dim = self.embedding_dim, 
-                                        embed_dim = self.embedding_dim,
-                                        kernel = kernel)
+        
+        if problem_name == 'pdtsp' or problem_name == 'pdtspl':
+            self.decoder = MultiHeadDecoderPDTSP(n_heads = self.n_heads_decoder,
+                                            input_dim = self.embedding_dim, 
+                                            embed_dim = self.embedding_dim,
+                                            kernel = kernel)
+        else:
+            self.decoder = MultiHeadDecoder(n_heads = self.n_heads_decoder,
+                                            input_dim = self.embedding_dim, 
+                                            embed_dim = self.embedding_dim,
+                                            kernel = kernel)
         
         print(self.get_parameter_number())
 

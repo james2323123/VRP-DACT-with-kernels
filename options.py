@@ -22,6 +22,9 @@ def get_options(args=None):
     parser.add_argument('--no_DDP', action='store_true', help='disable distributed parallel')
     parser.add_argument('--seed', type=int, default=1234, help='random seed to use')
     parser.add_argument('--kernel', default='no_kernel', help='kernel to use')
+    parser.add_argument('--kernel_NFE', type=bool, default=True, help='whether to use kernels on the NFE side')
+    parser.add_argument('--kernel_PFE', type=bool, default=False, help='whether to use kernels on the PFE side')
+    parser.add_argument('--kernel_critic', type=bool, default=True, help='whether to use kernels on the critic network')
     
     # DACT parameters
     parser.add_argument('--v_range', type=float, default=6., help='to control the entropy')

@@ -4,6 +4,7 @@ import numpy as np
 from torch import nn
 import math
 from nets.kernels import *
+from torch.distributions import Categorical
 
 # implements skip-connection module
 class SkipConnection(nn.Module):
@@ -79,6 +80,143 @@ class Normalization(nn.Module):
             assert self.normalizer is None, "Unknown normalizer type"
             return input
 
+class CompatNeighbour(nn.Module):
+    def __init__(
+            self,
+            n_heads,
+            input_dim,
+            embed_dim=None,
+            val_dim=None,
+            key_dim=None
+    ):
+        super(CompatNeighbour, self).__init__()
+    
+        n_heads = 4
+        
+        if val_dim is None:
+            # assert embed_dim is not None, "Provide either embed_dim or val_dim"
+            val_dim = embed_dim // n_heads
+        if key_dim is None:
+            key_dim = val_dim
+
+        self.n_heads = n_heads
+        self.input_dim = input_dim
+        self.embed_dim = embed_dim
+        self.val_dim = val_dim
+        self.key_dim = key_dim
+
+        self.W_Q = nn.Parameter(torch.Tensor(n_heads, input_dim, key_dim))
+        self.W_K = nn.Parameter(torch.Tensor(n_heads, input_dim, key_dim))
+        
+        self.agg = MLP(12, 32, 32, 1, 0)
+
+        self.init_parameters()
+
+    def init_parameters(self):
+
+        for param in self.parameters():
+            stdv = 1. / math.sqrt(param.size(-1))
+            param.data.uniform_(-stdv, stdv)
+
+    def forward(self, h, rec, visited_order_map, selection_sig):
+        
+        pre = rec.argsort()
+        post = rec.gather(1, rec)
+        batch_size, graph_size, input_dim = h.size()
+
+        flat = h.contiguous().view(-1, input_dim) #################   reshape
+
+        # last dimension can be different for keys and values
+        shp = (self.n_heads, batch_size, graph_size, -1)
+
+        # Calculate queries, (n_heads, n_query, graph_size, key/val_size)
+        hidden_Q = torch.matmul(flat, self.W_Q).view(shp)
+        hidden_K = torch.matmul(flat, self.W_K).view(shp)
+        
+        Q_pre = hidden_Q.gather(2, pre.view(1, batch_size, graph_size, 1).expand_as(hidden_Q))
+        K_post = hidden_K.gather(2, post.view(1, batch_size, graph_size, 1).expand_as(hidden_Q))
+    
+        compatibility = ((Q_pre * hidden_K).sum(-1) + (hidden_Q * K_post).sum(-1) - (Q_pre * K_post).sum(-1))[:,:,1:]
+        
+        compatibility_pairing = torch.cat((compatibility[:,:,:graph_size // 2], compatibility[:,:,graph_size // 2:]), 0)
+
+        compatibility_pairing = self.agg(torch.cat((compatibility_pairing.permute(1,2,0), 
+                                                    selection_sig.permute(0,2,1)),-1)).squeeze()
+        
+        return  compatibility_pairing
+
+class Reinsertion(nn.Module):
+    def __init__(
+            self,
+            n_heads,
+            input_dim,
+            embed_dim=None,
+            val_dim=None,
+            key_dim=None
+    ):
+        super(Reinsertion, self).__init__()
+    
+        n_heads = 4
+        
+        if val_dim is None:
+            # assert embed_dim is not None, "Provide either embed_dim or val_dim"
+            val_dim = embed_dim // n_heads
+        if key_dim is None:
+            key_dim = val_dim
+
+        self.n_heads = n_heads
+        self.input_dim = input_dim
+        self.embed_dim = embed_dim
+        self.val_dim = val_dim
+        self.key_dim = key_dim
+        
+        self.norm_factor = 1 / math.sqrt(2 * embed_dim)  # See Attention is all you need
+
+
+        self.compater_insert1 = MultiHeadCompat(n_heads,
+                                        embed_dim,
+                                        embed_dim,
+                                        embed_dim,
+                                        key_dim)
+        
+        self.compater_insert2 = MultiHeadCompat(n_heads,
+                                        embed_dim,
+                                        embed_dim,
+                                        embed_dim,
+                                        key_dim)
+        
+        self.agg = MLP(16, 32, 32, 1, 0)
+
+    def init_parameters(self):
+
+        for param in self.parameters():
+            stdv = 1. / math.sqrt(param.size(-1))
+            param.data.uniform_(-stdv, stdv)
+
+
+    def forward(self, h, pos_pickup, pos_delivery, rec, mask=None):
+        
+        batch_size, graph_size, input_dim = h.size()
+        shp = (batch_size, graph_size, graph_size, self.n_heads)
+        shp_p = (batch_size, -1, 1, self.n_heads)
+        shp_d = (batch_size, 1, -1, self.n_heads)
+        
+        arange = torch.arange(batch_size, device = h.device)
+        h_pickup = h[arange,pos_pickup].unsqueeze(1)
+        h_delivery = h[arange,pos_delivery].unsqueeze(1)
+        h_K_neibour = h.gather(1, rec.view(batch_size, graph_size, 1).expand_as(h))
+        
+        compatibility_pickup_pre = self.compater_insert1(h_pickup, h).permute(1,2,3,0).view(shp_p).expand(shp)
+        compatibility_pickup_post = self.compater_insert2(h_pickup, h_K_neibour).permute(1,2,3,0).view(shp_p).expand(shp)
+        compatibility_delivery_pre = self.compater_insert1(h_delivery, h).permute(1,2,3,0).view(shp_d).expand(shp)
+        compatibility_delivery_post = self.compater_insert2(h_delivery, h_K_neibour).permute(1,2,3,0).view(shp_d).expand(shp)
+        
+        compatibility = self.agg(torch.cat((compatibility_pickup_pre, 
+                                            compatibility_pickup_post, 
+                                            compatibility_delivery_pre, 
+                                            compatibility_delivery_post),-1)).squeeze()
+        return compatibility
+
 # implements the encoder for Critic net
 class MultiHeadAttentionLayerforCritic(nn.Sequential):
 
@@ -88,7 +226,8 @@ class MultiHeadAttentionLayerforCritic(nn.Sequential):
             embed_dim,
             feed_forward_hidden,
             normalization='layer',
-            kernel='no_kernel'
+            kernel='no_kernel',
+            kernel_enabled = True
     ):
         super(MultiHeadAttentionLayerforCritic, self).__init__(
             SkipConnection(
@@ -96,7 +235,8 @@ class MultiHeadAttentionLayerforCritic(nn.Sequential):
                         n_heads,
                         input_dim=embed_dim,
                         embed_dim=embed_dim,
-                        kernel=kernel
+                        kernel=kernel,
+                        kernel_enabled=kernel_enabled
                     )                
             ),
             Normalization(embed_dim, normalization),
@@ -151,7 +291,8 @@ class MultiHeadAttentionOrigin(nn.Module):
             embed_dim=None,
             val_dim=None,
             key_dim=None,
-            kernel='no_kernel'
+            kernel='no_kernel',
+            kernel_enabled=True
     ):
         super(MultiHeadAttentionOrigin, self).__init__()
 
@@ -173,6 +314,7 @@ class MultiHeadAttentionOrigin(nn.Module):
         self.W_val = nn.Parameter(torch.Tensor(n_heads, input_dim, val_dim))
 
         self.kernel_func = kernels.get(kernel)
+        self.kernel_enabled = kernel_enabled
 
         if embed_dim is not None:
             self.W_out = nn.Parameter(torch.Tensor(n_heads, key_dim, embed_dim))
@@ -207,7 +349,10 @@ class MultiHeadAttentionOrigin(nn.Module):
         V = torch.matmul(hflat, self.W_val).view(shp)
 
         # Calculate compatibility (n_heads, batch_size, n_query, graph_size)
-        compatibility = self.norm_factor * self.kernel_func(Q,K)
+        if self.kernel_enabled:
+            compatibility = self.norm_factor * self.kernel_func(Q,K)
+        else:
+            compatibility = self.norm_factor * torch.matmul(Q, K.transpose(2, 3))
 
         attn = F.softmax(compatibility, dim=-1)   
        
@@ -230,7 +375,8 @@ class MultiHeadAttention(nn.Module):
             embed_dim=None,
             val_dim=None,
             key_dim=None,
-            kernel='no_kernel'
+            kernel='no_kernel',
+            kernel_enabled = [True, False]
     ):
         super(MultiHeadAttention, self).__init__()
         
@@ -257,6 +403,7 @@ class MultiHeadAttention(nn.Module):
         self.W_val_pos = nn.Parameter(torch.Tensor(2 * n_heads, self.input_dim, self.val_dim))
 
         self.kernel_func = kernels.get(kernel)
+        self.kernel_enabled = kernel_enabled
         
         # W_h^O and W_g^O in the paper
         if embed_dim is not None:
@@ -293,8 +440,16 @@ class MultiHeadAttention(nn.Module):
         V_pos = torch.matmul(h_pos, self.W_val_pos).view(shp_v)
 
         # Get attention correlations and norm by softmax
-        node_correlations = self.norm_factor * self.kernel_func(Q_node, K_node)
-        pos_correlations =  self.norm_factor * torch.matmul(Q_pos, K_pos.transpose(-2, -1))
+        if self.kernel_enabled[0]:
+            node_correlations = self.norm_factor * self.kernel_func(Q_node, K_node)
+        else:
+            node_correlations = self.norm_factor * torch.matmul(Q_node, K_node.transpose(-2, -1))
+        
+        if self.kernel_enabled[1]:
+            pos_correlations =  self.norm_factor * self.kernel_func(Q_pos, K_pos)
+        else:
+            pos_correlations =  self.norm_factor * torch.matmul(Q_pos, K_pos.transpose(-2, -1))
+        
         attn1 = F.softmax(node_correlations, dim=-1) # head, bs, n, n
         attn2 = F.softmax(pos_correlations, dim=-1) # head, bs, n, n
         
@@ -449,6 +604,108 @@ class MultiHeadDecoder(nn.Module):
         # FFA sublater
         return self.value_head(compatibility).squeeze(-1)
 
+class MultiHeadDecoderPDTSP(nn.Module):
+    def __init__(
+            self,
+            input_dim,
+            embed_dim=None,
+            val_dim=None,
+            key_dim=None,
+            v_range = 6,
+    ):
+        super(MultiHeadDecoderPDTSP, self).__init__()
+        self.n_heads = n_heads = 1
+        self.embed_dim = embed_dim
+        self.input_dim = input_dim        
+        self.range = v_range
+        
+        self.compater_removal = CompatNeighbour(n_heads,
+                                        embed_dim,
+                                        embed_dim,
+                                        embed_dim,
+                                        key_dim)
+        self.compater_reinsertion = Reinsertion(n_heads,
+                                        embed_dim,
+                                        embed_dim,
+                                        embed_dim,
+                                        key_dim)
+            
+        self.project_graph = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
+        self.project_node = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
+
+    def init_parameters(self):
+
+        for param in self.parameters():
+            stdv = 1. / math.sqrt(param.size(-1))
+            param.data.uniform_(-stdv, stdv)
+        
+        
+    def forward(self, problem, h_em, rec, x_in, top2, visited_order_map, pre_action, selection_sig, fixed_action = None, require_entropy = False):        
+    
+        bs, gs, dim = h_em.size()
+        half_pos =  (gs - 1) // 2
+        
+        arange = torch.arange(bs)
+    
+        h = self.project_node(h_em) + self.project_graph(h_em.max(1)[0])[:, None, :].expand(bs, gs, dim)
+        
+        ############# action1 removal
+
+        action_removal_table = torch.tanh(self.compater_removal(h, rec, visited_order_map, selection_sig).squeeze()) * self.range
+        if pre_action is not None and pre_action[0,0] > 0:
+            action_removal_table[arange, pre_action[:,0]] = -1e20
+        log_ll_removal = F.log_softmax(action_removal_table, dim = -1) if self.training else None
+        probs_removal = F.softmax(action_removal_table, dim = -1)
+
+        if fixed_action is not None:
+            action_removal = fixed_action[:,:1]
+        else:
+            action_removal = probs_removal.multinomial(1)
+        selected_log_ll_action1 = log_ll_removal.gather(1, action_removal) if self.training else torch.tensor(0).to(h.device)
+        
+        ############# action2
+        pos_pickup = (1 + action_removal).view(-1)
+        pos_delivery = pos_pickup + half_pos
+        mask_table = problem.get_swap_mask(action_removal + 1, visited_order_map, top2).expand(bs, gs, gs).cpu()
+
+        action_reinsertion_table = torch.tanh(self.compater_reinsertion(h, pos_pickup, pos_delivery, rec, mask_table)) * self.range
+             
+        action_reinsertion_table[mask_table] = -1e20
+        
+        del visited_order_map, mask_table
+
+        #reshape action_reinsertion_table
+        action_reinsertion_table = action_reinsertion_table.view(bs, -1)
+        log_ll_reinsertion = F.log_softmax(action_reinsertion_table, dim = -1) if self.training else None
+        probs_reinsertion = F.softmax(action_reinsertion_table, dim = -1)
+
+        # fixed action
+        if fixed_action is not None:
+            p_selected = fixed_action[:,1]
+            d_selected = fixed_action[:,2]
+            pair_index = p_selected * gs + d_selected
+            pair_index = pair_index.view(-1,1)
+            action = fixed_action
+        else:
+            # sample one action
+            pair_index = probs_reinsertion.multinomial(1)
+            
+            p_selected = pair_index // gs 
+            d_selected = pair_index % gs     
+            action = torch.cat((action_removal.view(bs, -1), p_selected, d_selected),-1)  # pair: no_head bs, 2
+        
+        selected_log_ll_action2 = log_ll_reinsertion.gather(1, pair_index)  if self.training else torch.tensor(0).to(h.device)
+        
+        log_ll = selected_log_ll_action1 + selected_log_ll_action2
+        
+        if require_entropy and self.training:
+            dist = Categorical(probs_reinsertion, validate_args=False)
+            entropy = dist.entropy()
+        else:
+            entropy = None
+
+        return action, log_ll, entropy
+
 # implements the DAC encoder
 class MultiHeadEncoder(nn.Module):
 
@@ -458,7 +715,8 @@ class MultiHeadEncoder(nn.Module):
             embed_dim,
             feed_forward_hidden,
             normalization='layer',
-            kernel='no_kernel'
+            kernel='no_kernel',
+            kernel_enabled = [True, False]
     ):
         super(MultiHeadEncoder, self).__init__()
         
@@ -467,7 +725,8 @@ class MultiHeadEncoder(nn.Module):
                         embed_dim,
                         feed_forward_hidden,
                         normalization=normalization,
-                        kernel=kernel
+                        kernel=kernel,
+                        kernel_enabled = kernel_enabled
                 )
         
         self.FFandNorm_sublayer = FFandNormsubLayer(
@@ -490,7 +749,8 @@ class MultiHeadAttentionsubLayer(nn.Module):
             embed_dim,
             feed_forward_hidden,
             normalization='layer',
-            kernel='no_kernel'
+            kernel='no_kernel',
+            kernel_enabled = [True, False]
     ):
         super(MultiHeadAttentionsubLayer, self).__init__()
         
@@ -498,7 +758,8 @@ class MultiHeadAttentionsubLayer(nn.Module):
                     n_heads,
                     input_dim=embed_dim,
                     embed_dim=embed_dim,
-                    kernel=kernel
+                    kernel=kernel,
+                    kernel_enabled = kernel_enabled
                 )
         
         self.Norm = Normalization(embed_dim, normalization)

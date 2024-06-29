@@ -12,7 +12,8 @@ class Critic(nn.Module):
              n_heads,
              n_layers,
              normalization,
-             kernel='no_kernel'
+             kernel = 'no_kernel',
+             kernel_enabled = True
              ):
         
         super(Critic, self).__init__()
@@ -27,7 +28,9 @@ class Critic(nn.Module):
                                     self.embedding_dim * 2, 
                                     self.hidden_dim * 2, 
                                     self.normalization,
-                                    kernel = kernel)
+                                    kernel = kernel,
+                                    kernel_enabled = kernel_enabled
+                                    )
                         for _ in range(1)))
             
         self.value_head = ValueDecoder(input_dim = self.embedding_dim * 2,

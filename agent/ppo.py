@@ -49,7 +49,8 @@ class PPO:
             normalization = opts.normalization,
             v_range = opts.v_range,
             seq_length = size,
-            kernel = opts.kernel
+            kernel = opts.kernel,
+            kernel_enabled = [opts.kernel_NFE, opts. kernel_PFE]
         )
         
         if not opts.eval_only:
@@ -62,7 +63,8 @@ class PPO:
                     n_heads = opts.critic_head_num,
                     n_layers = opts.n_encode_layers,
                     normalization = opts.normalization,
-                    kernel = opts.kernel
+                    kernel = opts.kernel,
+                    kernel_enabled = opts.kernel_critic
                 )
         
             # figure out the optimizer
