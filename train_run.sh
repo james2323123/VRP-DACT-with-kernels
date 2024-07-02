@@ -9,8 +9,8 @@ python run.py \
 --max_grad_norm 0.2 \
 --val_m 1 \
 --val_dataset  './datasets/tsp_50_10000.pkl' \
---run_name 'TSP50_no_kernel_64by2' \
---kernel no_kernel \
---hidden_dim 64 \
---embedding_dim 64 \
---batch_size 400
+--run_name 'TSP50_cauchy_48by2' \
+--kernel cauchy \
+--hidden_dim 48 \
+--embedding_dim 48 \
+--batch_size 400 \

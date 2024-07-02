@@ -49,5 +49,7 @@ kernels = {
     'cauchy' : cauchy,
     'norm_cauchy' : normalized_cauchy,
     'clip_cauchy' : clipped_cauchy,
-    'no_kernel' : vanilla_attention
+    'no_kernel' : vanilla_attention,
+    'exponential' : exponential,
+    'gaussian' : gaussian
 }
