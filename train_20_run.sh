@@ -1,6 +1,6 @@
 python run.py \
 --problem tsp \
---graph_size 50 \
+--graph_size 20 \
 --step_method 2_opt \
 --n_step 4 \
 --T_train 200 \
@@ -8,9 +8,9 @@ python run.py \
 --best_cl \
 --max_grad_norm 0.2 \
 --val_m 1 \
---val_dataset  './datasets/tsp_50_10000.pkl' \
---run_name 'TSP50_cauchy_48by2' \
+--val_dataset  './datasets/tsp_20_10000.pkl' \
+--run_name 'TSP20_cauchy_32by2' \
 --kernel cauchy \
---hidden_dim 48 \
---embedding_dim 48 \
+--hidden_dim 32 \
+--embedding_dim 32 \
 --batch_size 400 \
