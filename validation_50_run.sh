@@ -3,14 +3,14 @@ python run.py \
 --problem tsp \
 --graph_size 50 \
 --step_method 2_opt \
---T_max 1000 \
+--T_max 10000 \
 --val_m 4 \
 --val_size 10000 \
---load_path './pretrained/tsp_50/cauchy_32by2_new/epoch-199.pt' \
+--load_path './pretrained/tsp_50_cauchy.pt' \
 --init_val_met greedy \
---val_dataset  './datasets/tsp_100_10000.pkl' \
+--val_dataset  './datasets/tsp_50_10000.pkl' \
 --kernel cauchy \
---hidden_dim 64 \
---embedding_dim 64 \
+--hidden_dim 32 \
+--embedding_dim 32 \
 --no_tb \
 --no_saving \
