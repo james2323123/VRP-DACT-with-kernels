@@ -1,0 +1,15 @@
+name: vrp_kernels
+channels:
+  - pytorch
+  - nvidia
+  - defaults
+dependencies:
+  - python=3.10
+  - pytorch
+  - numpy
+  - pandas
+  - pip
+  - tqdm
+
+  - pip
+    - tensorboard-logger
