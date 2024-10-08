@@ -11,5 +11,5 @@ dependencies:
   - pip
   - tqdm
 
-  - pip
+  - pip:
     - tensorboard-logger
