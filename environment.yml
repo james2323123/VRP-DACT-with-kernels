@@ -10,6 +10,7 @@ dependencies:
   - pandas
   - pip
   - tqdm
+  - tensorboard
 
   - pip:
     - tensorboard-logger
