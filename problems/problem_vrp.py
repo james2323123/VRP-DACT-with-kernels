@@ -317,7 +317,8 @@ class CVRPDataset(Dataset):
         self.real_size = size # the number of real nodes in cvrp
 
         if filename is not None:
-            assert os.path.splitext(filename)[1] == '.pkl', 'file name error'
+            # does not work on windows
+            # assert os.path.splitext(filename)[1] == '.pkl', 'file name error'
             
             with open(filename, 'rb') as f:
                 data = pickle.load(f)
